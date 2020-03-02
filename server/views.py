@@ -1,130 +1,98 @@
+from rest_framework.decorators import action
 from django.contrib.auth.models import User, Group
-from server.models import TrashStats, TrashPlace, Campus
+from server.models import TrashStats, TrashPlace, Campus, OwnPermission, CampusStats
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.http import Http404
 from rest_framework import status
 from .serializers import UserSerializer, GroupSerializer, TrashPlaceSerializer, TrashStatsSerializer, CampusSerializer
+from .serializers import OwnPermissionSerializer, CampusStatsSerializer
 from django.shortcuts import render
+from rest_framework import generics
+from django.utils.timezone import now
+import datetime
+from django.http import HttpResponse
+from django.http import response
+from itertools import chain
 
 
-# Create your views here.
+class CampusStatsViewSet(viewsets.ModelViewSet):
+    queryset = CampusStats.objects.all()
+    serializer_class = CampusStatsSerializer
+
+    def get_queryset(self):
+        queryset = CampusStats.objects.all()
+
+        campusId = self.request.query_params.get('campusId', None)
+        print(campusId)
+        if campusId is None:
+            return queryset
+
+        queryset = queryset.filter(campusId_id=campusId)
+
+        return queryset
+
+
 class UserViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint that allows users to be viewed or edited.
-    """
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
 
 
+class OwnPermissionViewSet(viewsets.ModelViewSet):
+    queryset = OwnPermission.objects.all()
+    serializer_class = OwnPermissionSerializer
+
+
 class GroupViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint that allows groups to be viewed or edited.
-    """
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
 
 
 class TrashPlacesViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint that allows trashPlaces to be viewed or edited.
-    """
-    queryset = TrashPlace.objects.all()
+    queryset = TrashPlace.objects.all().order_by('-deployDate')
     serializer_class = TrashPlaceSerializer
 
+    def get_queryset(self):
+        queryset = TrashPlace.objects.all()
+        user = self.request.user
+        permissions = OwnPermission.objects.filter(user=user)
+        print(permissions, permissions.count())
+        if permissions.count() == 0:
+            return queryset.filter(status=-1)
 
-class TrashPlacesList(APIView):
-    def get(self, request, format=None):
-        trashPlaces = TrashPlace.objects.all()
-        serializer = TrashPlaceSerializer(trashPlaces, many=True)
-        return Response(serializer.data)
+        permission = permissions[0]
+        print(repr(permission.content_type))
 
-    def post(self, request, format=None):
-        serializer = TrashPlaceSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if permission.permission == 1:
+            return queryset.filter(id=permission.trashPlaceId)
+        elif permission.permission == 2:
+            return queryset.filter(campusId=permission.campusId)
 
-
-class TrashPlacesDetail(APIView):
-    def getObject(self, pk):
-        try:
-            return TrashPlace.objects.get(pk=pk)
-        except TrashPlace.DoesNotExist:
-            raise Http404
-
-    def get(self, request, pk, format=None):
-        trashPlace = self.getObject(pk)
-        serializer = TrashPlaceSerializer(trashPlace)
-        return Response(serializer.data)
-
-    def put(self, request, pk, format=None):
-        trashPlace = self.getObject(pk)
-        serializer = TrashPlaceSerializer(trashPlace, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, pk, format=None):
-        trashPlace = self.getObject(pk)
-        trashPlace.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return queryset
 
 
 class TrashStatsViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint that allows trashStats to be viewed or edited.
-    """
     queryset = TrashStats.objects.all()
     serializer_class = TrashStatsSerializer
 
+    def get_queryset(self):
+        queryset = TrashStats.objects.all()
+        campusId = self.request.query_params.get('campusid', None)
+        if campusId is None:
+            return queryset
+        queryset = queryset.filter(campusId=campusId)
+        timeDelta = self.request.query_params.get('timeDelta', None)
+        getStats = self.request.query_params.get('getStats', False)
+        if timeDelta is None:
+            return queryset
+        elif timeDelta == "month":
+            queryset = queryset.filter(requestDate=now()-timeDelta(days=30))
+            return queryset
+
+
+        # dateFrom = datetime.datetime(self.request.query_params.get('datefrom', now))
+
 
 class CampusViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint that allows campuses to be viewed or edited.
-    """
     queryset = Campus.objects.all()
     serializer_class = CampusSerializer
-
-
-class CampusList(APIView):
-    def get(self, request, format=None):
-        campuses = Campus.objects.all()
-        serializer = CampusSerializer(campuses, many=True)
-        return Response(serializer.data)
-
-    def post(self, request, format=None):
-        serializer = CampusSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class CampusDetail(APIView):
-    def getObject(self, pk):
-        try:
-            return Campus.objects.get(pk=pk)
-        except Campus.DoesNotExist:
-            raise Http404
-
-    def get(self, request, pk, format=None):
-        campus = self.getObject(pk)
-        serializer = CampusSerializer(campus)
-        return Response(serializer.data)
-
-    def put(self, request, pk, format=None):
-        campus = self.getObject(pk)
-        serializer = CampusSerializer(campus, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, pk, format=None):
-        campus = self.getObject(pk)
-        campus.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)

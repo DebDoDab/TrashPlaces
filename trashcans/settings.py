@@ -43,6 +43,15 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
 ]
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.mail.ru'
+EMAIL_USE_TLS = True
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'vadim.klishevich@mail.ru'
+EMAIL_HOST_PASSWORD = 'asvuig13th2r8o5'
+TRASH_COUNT_TO_SEND_EMAIL = 3
+
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
